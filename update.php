@@ -3,18 +3,28 @@
 $pdo = new PDO('mysql:host=localhost;port=3306;dbname=product_crud', 'root', '');
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+$id = $_GET['id'] ?? null;
+
+if (!$id) {
+  header('Location: index.php');
+  exit;
+}
+
+$statement = $pdo->prepare("SELECT * FROM products WHERE id=:id");
+$statement->bindValue(':id', $id);
+$statement->execute();
+$product = $statement->fetch(PDO::FETCH_ASSOC);
+
 $errors = [];
 
-$title = '';
-$price = '';
-$description = '';
+$title = $product['title'];
+$price = $product['price'];
+$description = $product['description'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $title = $_POST['title'];
   $description = $_POST['description'];
   $price = $_POST['price'];
-  $date = date('Y-m-d H:i:s');
-
 
   if (!$title) {
     array_push($errors, 'Product title is required');
@@ -30,9 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if (empty($errors)) {
     $image = $_FILES['image'] ?? null;
-    $imagePath = '';
+    $imagePath = $product['image'];
 
     if ($image && $image['tmp_name']) {
+      if ($product['image']) {
+        unlink($product['image']);
+      }
+
       $imagePath = 'images/' . rand(1, 1000000000000) . '/' . $image['name'];
 
       mkdir(dirname($imagePath));
@@ -41,15 +55,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $statement = $pdo->prepare(
-      "INSERT INTO products (title, image, description, price, create_date) 
-      VALUES (:title, :image, :description, :price, :date)"
+      "UPDATE products
+        SET 
+          title = :title, 
+          image = :image, 
+          description = :description, 
+          price = :price WHERE id = :id"
     );
 
+    $statement->bindValue(':id', $id);
     $statement->bindValue(':title', $title);
     $statement->bindValue(':image', $imagePath);
     $statement->bindValue(':description', $description);
     $statement->bindValue(':price', $price);
-    $statement->bindValue(':date', $date);
 
     $statement->execute();
 
@@ -75,7 +93,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 
 <body>
-  <h1>Create new Product</h1>
+  <p>
+    <a href="index.php" class="btn btn-secondary">Go Back to Products</a>
+  </p>
+
+  <h1>Edit Product</h1>
 
   <?php if (!empty($errors)) : ?>
     <div class="alert alert-danger">
@@ -86,6 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <?php endif ?>
 
   <form action="" method="POST" enctype="multipart/form-data">
+    <?php if ($product['image']) : ?>
+      <img src="<?php echo $product['image'] ?>" class="update-image" alt="">
+    <?php endif; ?>
     <div class="form-group">
       <label>Product Image</label>
       <br />
@@ -97,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     <div class="form-group">
       <label>Product Description</label>
-      <textarea class="form-control" name="description"><?php echo $description ?></textarea>
+      <textarea class="form-control" name="description" rows="4"><?php echo $product['description']; ?></textarea>
     </div>
     <div class="form-group">
       <label>Product price</label>
